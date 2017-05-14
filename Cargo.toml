@@ -1,0 +1,6 @@
+[package]
+name = "wallsplash"
+version = "0.0.1"
+authors = ["Yufeng Wang <yufengwang05@gmail.com>"]
+
+[dependencies]
