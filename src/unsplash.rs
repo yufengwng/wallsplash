@@ -26,6 +26,7 @@ struct Links {
     download: String,
 }
 
+#[derive(Debug)]
 pub struct Client {
     token: String,
     limit: u32,

@@ -5,12 +5,15 @@ extern crate tempdir;
 
 use std::error::Error;
 use std::fs;
+use std::path::PathBuf;
 use std::process::Command;
 use std::thread;
 use std::time::Duration;
 
 mod errors;
 mod unsplash;
+
+use errors::WallsplashError;
 
 #[derive(Debug)]
 pub struct Config {
@@ -38,44 +41,69 @@ impl Config {
     }
 }
 
+struct LocalFetcher {
+    dir: String,
+    curr: usize,
+}
+
+impl LocalFetcher {
+    fn new(dir: &str) -> LocalFetcher {
+        LocalFetcher {
+            dir: dir.to_owned(),
+            curr: 0,
+        }
+    }
+}
+
+impl LocalFetcher {
+    fn next_image_path(&mut self) -> Result<PathBuf, Box<Error>> {
+        let mut images = Vec::new();
+
+        for entry in fs::read_dir(&self.dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_file() {
+                images.push(path);
+            }
+        }
+
+        if images.len() > 0 {
+            if self.curr >= images.len() {
+                self.curr = 0;
+            }
+
+            let path = images[self.curr].clone();
+            self.curr += 1;
+
+            println!("local: {:?}", path);
+            return Ok(path);
+        }
+
+        Err(Box::new(WallsplashError::UnsplashNoImage))
+    }
+}
+
 pub fn run(config: &Config) -> Result<(), Box<Error>> {
     println!("{:?}\n", config);
 
     let mut unsplash = unsplash::Client::new(config.token.as_str(), config.limit, config.refresh)?;
+    let mut local = LocalFetcher::new(config.dir.as_str());
 
-    let mut local_idx = 0;
     let mut do_local = true;
 
     loop {
-        if do_local {
-            let mut images = Vec::new();
-            for entry in fs::read_dir(&config.dir)? {
-                let entry = entry?;
-                let path = entry.path();
-                if path.is_file() {
-                    images.push(path);
-                }
-            }
+        let path = if do_local {
+            local.next_image_path()
+        } else {
+            unsplash.next_image_path()
+        };
 
-            if images.len() > 0 {
-                if local_idx >= images.len() {
-                    local_idx = 0;
-                }
-
-                let path = &images[local_idx];
-                local_idx += 1;
-
-                println!("local: {:?}", path);
+        match path {
+            Ok(path) => {
                 Command::new("feh").arg("--bg-fill").arg(path).output()?;
             }
-        } else {
-            match unsplash.next_image_path() {
-                Ok(path) => {
-                    Command::new("feh").arg("--bg-fill").arg(path).output()?;
-                }
-                Err(e) => {
-                    println!("{}", e);
-                }
+            Err(e) => {
+                println!("{}", e);
             }
         }
 
