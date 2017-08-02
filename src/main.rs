@@ -1,4 +1,6 @@
+#[macro_use] extern crate log;
 extern crate clap;
+extern crate env_logger;
 extern crate wallsplash;
 
 use std::process;
@@ -8,6 +10,8 @@ use clap::{Arg, App};
 
 
 fn main() {
+    env_logger::init().unwrap();
+
     let matches = App::new("wallsplash")
         .version("0.0.1")
         .author("Yufeng Wang <yufengwang05@gmail.com>")
@@ -42,12 +46,15 @@ fn main() {
         .get_matches();
 
     let limit = match matches.value_of("limit") {
-        None => 10,
+        None => {
+            debug!("defaulting `limit` to 10");
+            10
+        }
         Some(num) => {
             match num.parse::<u32>() {
                 Ok(n) => n,
                 Err(e) => {
-                    println!("{}", e);
+                    error!("`limit` arg: {}", e);
                     process::exit(1);
                 }
             }
@@ -55,12 +62,15 @@ fn main() {
     };
 
     let timeout = match matches.value_of("timeout") {
-        None => Duration::from_secs(30 * 60),
+        None => {
+            debug!("defaulting `timeout` to 30 mins");
+            Duration::from_secs(30 * 60)
+        }
         Some(secs) => {
             match secs.parse::<u64>() {
                 Ok(s) => Duration::from_secs(s),
                 Err(e) => {
-                    println!("{}", e);
+                    error!("`timeout` arg: {}", e);
                     process::exit(1);
                 }
             }
@@ -68,12 +78,15 @@ fn main() {
     };
 
     let refresh = match matches.value_of("refresh") {
-        None => Duration::from_secs(24 * 60 * 60),
+        None => {
+            debug!("defaulting `refresh` to 1 day");
+            Duration::from_secs(24 * 60 * 60)
+        }
         Some(secs) => {
             match secs.parse::<u64>() {
                 Ok(s) => Duration::from_secs(s),
                 Err(e) => {
-                    println!("{}", e);
+                    error!("`refresh` arg: {}", e);
                     process::exit(1);
                 }
             }
@@ -91,7 +104,7 @@ fn main() {
     let result = match wallsplash::run(&config) {
         Ok(_) => 0,
         Err(err) => {
-            println!("{}", err);
+            error!("{}", err);
             1
         }
     };

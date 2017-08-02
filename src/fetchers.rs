@@ -53,9 +53,11 @@ impl Fetch for LocalFetcher {
 
         if images.len() > 0 {
             self.next= self.next % images.len();
+
             let path = images[self.next].clone();
             self.next += 1;
-            println!("local: {:?}", path);
+
+            debug!("local: {:?}", path);
             return Ok(path);
         }
 
@@ -102,7 +104,7 @@ pub struct UnsplashFetcher {
 impl UnsplashFetcher {
     pub fn new(token: &str, limit: u32, refresh: Duration) -> Result<Self, Box<Error>> {
         let tempdir = TempDir::new("unsplash")?;
-        println!("{:?}", tempdir.path());
+        debug!("temp dir: {:?}", tempdir.path());
 
         Ok(UnsplashFetcher {
             token: token.to_owned(),
@@ -120,34 +122,34 @@ impl UnsplashFetcher {
     fn download_images(&mut self) -> Result<usize, Box<Error>> {
         let photos_uri = format!("{}{}?per_page={}&order_by=latest",
                                  UNSPLASH_API, PHOTOS_ENDPOINT, self.limit);
-        println!("url: {}\n", photos_uri);
+        debug!("url: {}\n", photos_uri);
 
         let request = reqwest::Client::new()?;
         let mut resp = request.get(&photos_uri)
             .header(Authorization(format!("Client-ID {}", self.token)))
             .send()?;
 
-        println!("response: {}", resp.url());
-        println!("status:   {}", resp.status());
-        println!("headers:\n\n{}", resp.headers());
+        debug!("response: {}", resp.url());
+        debug!("status:   {}", resp.status());
+        debug!("headers:\n\n{}", resp.headers());
 
         if !resp.status().is_success() {
             return Err(Box::new(WallsplashError::UnsplashAPIFail));
         }
 
         let photos: Vec<Photo> = resp.json()?;
-        println!("json: {:?}", photos);
+        debug!("json: {:?}", photos);
 
         let mut idx = 0;
         for photo in &photos {
             let img_url = &photo.links.download;
-            println!("downloading: {}", img_url);
+            debug!("downloading: {}", img_url);
 
             let mut resp = request.get(img_url.as_str()).send()?;
 
-            println!("response: {}", resp.url());
-            println!("status:   {}", resp.status());
-            println!("headers:\n\n{}", resp.headers());
+            debug!("response: {}", resp.url());
+            debug!("status:   {}", resp.status());
+            debug!("headers:\n\n{}", resp.headers());
 
             let mut img_file = match resp.headers().get::<ContentType>() {
                 Some(mime) => {
@@ -162,7 +164,7 @@ impl UnsplashFetcher {
                 None => continue,
             };
 
-            println!("writing image: {:?}\n", img_file);
+            debug!("writing image: {:?}\n", img_file);
             io::copy(&mut resp, &mut img_file)?;
             idx += 1;
         }
@@ -193,7 +195,7 @@ impl Fetch for UnsplashFetcher {
             let path = self.dir.path().join(format!("{}.jpg", self.next));
             self.next += 1;
 
-            println!("unsplash: {:?}", path);
+            debug!("unsplash: {:?}", path);
             return Ok(path);
         }
 
