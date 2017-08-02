@@ -15,7 +15,7 @@ fn main() {
         .arg(Arg::with_name("local_dir")
              .long("dir")
              .takes_value(true)
-             .value_name("DIR")
+             .value_name("PATH")
              .required(true)
              .help("Local directory of images"))
         .arg(Arg::with_name("api_token")
