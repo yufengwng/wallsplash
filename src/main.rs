@@ -13,7 +13,7 @@ fn main() {
     env_logger::init().unwrap();
 
     let matches = App::new("wallsplash")
-        .version("0.0.1")
+        .version("0.0.2")
         .author("Yufeng Wang <yufengwang05@gmail.com>")
         .about("Display wallpapers from local image directory and Unsplash.")
         .arg(Arg::with_name("local_dir")

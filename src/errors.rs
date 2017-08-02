@@ -1,5 +1,8 @@
+//! Module for library specific errors.
+
 use std::error::Error;
 use std::fmt;
+
 
 #[derive(Debug)]
 pub enum WallsplashError {
