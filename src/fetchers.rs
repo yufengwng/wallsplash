@@ -94,13 +94,13 @@ pub struct UnsplashFetcher {
     /// Whether caching is complete.
     cached: bool,
     /// Time until next refresh of image cache.
-    period: Duration,
+    refresh: Duration,
     /// Time when successful cache is completed.
     timestamp: Instant,
 }
 
 impl UnsplashFetcher {
-    pub fn new(token: &str, limit: u32, period: Duration) -> Result<Self, Box<Error>> {
+    pub fn new(token: &str, limit: u32, refresh: Duration) -> Result<Self, Box<Error>> {
         let tempdir = TempDir::new("unsplash")?;
         println!("{:?}", tempdir.path());
 
@@ -111,7 +111,7 @@ impl UnsplashFetcher {
             next: 0,
             total: 0,
             cached: false,
-            period: period,
+            refresh: refresh,
             timestamp: Instant::now(),
         })
     }
@@ -173,7 +173,7 @@ impl UnsplashFetcher {
 
 impl Fetch for UnsplashFetcher {
     fn next_image_path(&mut self) -> Result<PathBuf, Box<Error>> {
-        if !self.cached || self.timestamp.elapsed() >= self.period {
+        if !self.cached || self.timestamp.elapsed() >= self.refresh {
             match self.download_images() {
                 Ok(len) => {
                     self.cached = true;
