@@ -1,19 +1,21 @@
+//! Library for rotating desktop wallpapers using local and/or Unsplash images.
+
 #[macro_use] extern crate serde_derive;
 extern crate reqwest;
 extern crate serde;
 extern crate tempdir;
 
+
 use std::error::Error;
-use std::fs;
-use std::path::PathBuf;
 use std::process::Command;
 use std::thread;
 use std::time::Duration;
 
 mod errors;
-mod unsplash;
+mod fetchers;
 
-use errors::WallsplashError;
+use fetchers::{Fetch, LocalFetcher, UnsplashFetcher};
+
 
 #[derive(Debug)]
 pub struct Config {
@@ -41,52 +43,11 @@ impl Config {
     }
 }
 
-struct LocalFetcher {
-    dir: String,
-    curr: usize,
-}
-
-impl LocalFetcher {
-    fn new(dir: &str) -> LocalFetcher {
-        LocalFetcher {
-            dir: dir.to_owned(),
-            curr: 0,
-        }
-    }
-}
-
-impl LocalFetcher {
-    fn next_image_path(&mut self) -> Result<PathBuf, Box<Error>> {
-        let mut images = Vec::new();
-
-        for entry in fs::read_dir(&self.dir)? {
-            let entry = entry?;
-            let path = entry.path();
-            if path.is_file() {
-                images.push(path);
-            }
-        }
-
-        if images.len() > 0 {
-            if self.curr >= images.len() {
-                self.curr = 0;
-            }
-
-            let path = images[self.curr].clone();
-            self.curr += 1;
-
-            println!("local: {:?}", path);
-            return Ok(path);
-        }
-
-        Err(Box::new(WallsplashError::UnsplashNoImage))
-    }
-}
 
 pub fn run(config: &Config) -> Result<(), Box<Error>> {
     println!("{:?}\n", config);
 
-    let mut unsplash = unsplash::Client::new(config.token.as_str(), config.limit, config.refresh)?;
+    let mut unsplash = UnsplashFetcher::new(config.token.as_str(), config.limit, config.refresh)?;
     let mut local = LocalFetcher::new(config.dir.as_str());
 
     let mut do_local = true;

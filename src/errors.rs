@@ -3,6 +3,7 @@ use std::fmt;
 
 #[derive(Debug)]
 pub enum WallsplashError {
+    LocalNoImage,
     UnsplashAPIFail,
     UnsplashNoImage,
 }
@@ -16,6 +17,7 @@ impl fmt::Display for WallsplashError {
 impl Error for WallsplashError {
     fn description(&self) -> &str {
         match *self {
+            WallsplashError::LocalNoImage => "No local images found",
             WallsplashError::UnsplashAPIFail => "Unsplash /photos api failed",
             WallsplashError::UnsplashNoImage => "No images found from Unsplash",
         }
