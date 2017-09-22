@@ -1,6 +1,6 @@
 [package]
 name = "wallsplash"
-version = "0.0.2"
+version = "0.0.3"
 authors = ["Yufeng Wang <yufengwang05@gmail.com>"]
 
 [[bin]]
