@@ -67,7 +67,7 @@ impl Fetch for LocalFetcher {
 
 
 const UNSPLASH_API: &'static str = "https://api.unsplash.com";
-const PHOTOS_ENDPOINT: &'static str = "/photos/curated";
+const PHOTOS_ENDPOINT: &'static str = "/photos";
 
 #[derive(Deserialize, Debug)]
 struct Photo {
