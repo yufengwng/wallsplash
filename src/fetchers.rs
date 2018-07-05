@@ -14,12 +14,10 @@ use tempdir::TempDir;
 
 use errors::WallsplashError;
 
-
 pub trait Fetch {
     /// Returns the file path for the next image to display.
     fn next_image_path(&mut self) -> Result<PathBuf, Box<Error>>;
 }
-
 
 /// Fetcher for local images.
 #[derive(Debug)]
@@ -52,7 +50,7 @@ impl Fetch for LocalFetcher {
         }
 
         if images.len() > 0 {
-            self.next= self.next % images.len();
+            self.next = self.next % images.len();
 
             let path = images[self.next].clone();
             self.next += 1;
@@ -64,7 +62,6 @@ impl Fetch for LocalFetcher {
         Err(Box::new(WallsplashError::LocalNoImage))
     }
 }
-
 
 const UNSPLASH_API: &'static str = "https://api.unsplash.com";
 const PHOTOS_ENDPOINT: &'static str = "/photos";
@@ -120,12 +117,15 @@ impl UnsplashFetcher {
 
     /// Calls Unsplash API to download and cache images.
     fn download_images(&mut self) -> Result<usize, Box<Error>> {
-        let photos_uri = format!("{}{}?per_page={}&order_by=latest",
-                                 UNSPLASH_API, PHOTOS_ENDPOINT, self.limit);
+        let photos_uri = format!(
+            "{}{}?per_page={}&order_by=latest",
+            UNSPLASH_API, PHOTOS_ENDPOINT, self.limit
+        );
         debug!("url: {}\n", photos_uri);
 
         let request = reqwest::Client::new()?;
-        let mut resp = request.get(&photos_uri)
+        let mut resp = request
+            .get(&photos_uri)
             .header(Authorization(format!("Client-ID {}", self.token)))
             .send()?;
 
@@ -152,15 +152,13 @@ impl UnsplashFetcher {
             debug!("headers:\n\n{}", resp.headers());
 
             let mut img_file = match resp.headers().get::<ContentType>() {
-                Some(mime) => {
-                    match *mime.deref() {
-                        Mime(TopLevel::Image, SubLevel::Jpeg, _) => {
-                            let path = self.dir.path().join(format!("{}.jpg", idx));
-                            fs::File::create(path)?
-                        }
-                        _ => continue,
+                Some(mime) => match *mime.deref() {
+                    Mime(TopLevel::Image, SubLevel::Jpeg, _) => {
+                        let path = self.dir.path().join(format!("{}.jpg", idx));
+                        fs::File::create(path)?
                     }
-                }
+                    _ => continue,
+                },
                 None => continue,
             };
 
@@ -180,7 +178,7 @@ impl Fetch for UnsplashFetcher {
                 Ok(len) => {
                     self.cached = true;
                     self.total = len;
-                },
+                }
                 Err(err) => {
                     self.cached = false;
                     return Err(err);

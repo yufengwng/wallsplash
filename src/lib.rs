@@ -1,11 +1,12 @@
 //! Library for rotating desktop wallpapers using local and/or Unsplash images.
 
-#[macro_use] extern crate log;
-#[macro_use] extern crate serde_derive;
+#[macro_use]
+extern crate log;
+#[macro_use]
+extern crate serde_derive;
 extern crate reqwest;
 extern crate serde;
 extern crate tempdir;
-
 
 use std::error::Error;
 use std::process::Command;
@@ -16,7 +17,6 @@ mod errors;
 mod fetchers;
 
 use fetchers::{Fetch, LocalFetcher, UnsplashFetcher};
-
 
 #[derive(Debug)]
 pub struct Config {
@@ -43,7 +43,6 @@ impl Config {
         }
     }
 }
-
 
 pub fn run(config: &Config) -> Result<(), Box<Error>> {
     debug!("config: {:?}\n", config);
