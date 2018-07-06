@@ -1,5 +1,6 @@
 //! Module for image fetchers.
 
+use std::env;
 use std::error::Error;
 use std::fs;
 use std::io;
@@ -10,7 +11,6 @@ use std::time::{Duration, Instant};
 use reqwest;
 use reqwest::header::{Authorization, ContentType};
 use reqwest::mime::{Mime, SubLevel, TopLevel};
-use tempdir::TempDir;
 
 use errors::WallsplashError;
 
@@ -85,7 +85,7 @@ pub struct UnsplashFetcher {
     /// Max number of images to get from Unsplash.
     limit: u32,
     /// Directory for caching images.
-    dir: TempDir,
+    dir: PathBuf,
     /// Index of next image to use.
     next: usize,
     /// Total number of images cached.
@@ -100,13 +100,20 @@ pub struct UnsplashFetcher {
 
 impl UnsplashFetcher {
     pub fn new(token: &str, limit: u32, refresh: Duration) -> Result<Self, Box<Error>> {
-        let tempdir = TempDir::new("unsplash")?;
-        debug!("temp dir: {:?}", tempdir.path());
+        let mut cache = env::home_dir().unwrap();
+        cache.push(".config");
+        cache.push("wallsplash");
+        cache.push("cache");
+
+        if !cache.exists() || !cache.is_dir() {
+            debug!("creating cache directory {:?}", cache);
+            fs::create_dir_all(&cache)?;
+        }
 
         Ok(UnsplashFetcher {
             token: token.to_owned(),
             limit: limit,
-            dir: tempdir,
+            dir: cache,
             next: 0,
             total: 0,
             cached: false,
@@ -154,7 +161,7 @@ impl UnsplashFetcher {
             let mut img_file = match resp.headers().get::<ContentType>() {
                 Some(mime) => match *mime.deref() {
                     Mime(TopLevel::Image, SubLevel::Jpeg, _) => {
-                        let path = self.dir.path().join(format!("{}.jpg", idx));
+                        let path = self.dir.join(format!("{}.jpg", idx));
                         fs::File::create(path)?
                     }
                     _ => continue,
@@ -190,7 +197,7 @@ impl Fetch for UnsplashFetcher {
         if self.total > 0 {
             self.next = self.next % self.total;
 
-            let path = self.dir.path().join(format!("{}.jpg", self.next));
+            let path = self.dir.join(format!("{}.jpg", self.next));
             self.next += 1;
 
             debug!("unsplash: {:?}", path);

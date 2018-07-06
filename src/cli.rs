@@ -3,6 +3,7 @@
 extern crate toml;
 extern crate wallsplash;
 
+use std::env;
 use std::error::Error;
 use std::fs::File;
 use std::io::Read;
@@ -63,14 +64,18 @@ pub fn build_cli_app() -> App<'static, 'static> {
 }
 
 pub fn parse_config_file(matches: &ArgMatches) -> Result<Value, Box<Error>> {
-    let content = match matches.value_of("config") {
-        Some(path) => {
-            let mut content = String::new();
-            File::open(path)?.read_to_string(&mut content)?;
-            content
+    let path = match matches.value_of("config") {
+        Some(p) => p.to_string(),
+        None => {
+            let mut p = env::home_dir().unwrap();
+            p.push(".config");
+            p.push("wallsplash");
+            p.push("config.toml");
+            p.to_str().unwrap().to_string()
         }
-        None => String::new(),
     };
+    let mut content = String::new();
+    File::open(path)?.read_to_string(&mut content)?;
     match content.parse::<Value>() {
         Ok(v) => Ok(v),
         Err(e) => Err(Box::new(e)),
@@ -146,14 +151,14 @@ pub fn parse_arg_refresh(matches: &ArgMatches, table: &Value) -> Result<Duration
     Ok(match matches.value_of("refresh") {
         Some(secs) => Duration::from_secs(secs.parse::<u64>()?),
         None => {
-                let refresh = match table["unsplash"].as_table() {
-                    Some(t) => t["refresh"].as_integer(),
-                    None => None,
-                };
-                match refresh {
-                    Some(r) => Duration::from_secs(r as u64),
-                    None => Duration::from_secs(24 * 60 * 60),
-                }
+            let refresh = match table["unsplash"].as_table() {
+                Some(t) => t["refresh"].as_integer(),
+                None => None,
+            };
+            match refresh {
+                Some(r) => Duration::from_secs(r as u64),
+                None => Duration::from_secs(24 * 60 * 60),
+            }
         }
     })
 }

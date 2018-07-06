@@ -5,8 +5,8 @@ extern crate env_logger;
 extern crate toml;
 extern crate wallsplash;
 
-use std::process;
 use std::error::Error;
+use std::process;
 
 mod cli;
 

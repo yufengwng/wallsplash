@@ -6,7 +6,6 @@ extern crate log;
 extern crate serde_derive;
 extern crate reqwest;
 extern crate serde;
-extern crate tempdir;
 
 use std::error::Error;
 use std::process::Command;
@@ -45,7 +44,7 @@ impl Config {
 }
 
 pub fn run(config: &Config) -> Result<(), Box<Error>> {
-    debug!("config: {:?}\n", config);
+    debug!("{:?}\n", config);
 
     let mut unsplash = UnsplashFetcher::new(config.token.as_str(), config.limit, config.refresh)?;
     let mut local = LocalFetcher::new(config.dir.as_str());
