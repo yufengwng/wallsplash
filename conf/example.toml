@@ -1,0 +1,20 @@
+# Example TOML configuration file for wallsplash.
+
+# Seconds before displaying next image
+timeout = 1800
+
+[local]
+
+# Path to local wallpaper image directory
+dir = "/path/to/dir"
+
+[unsplash]
+
+# API token for Unsplash web services
+token = "YOUR_TOKEN_HERE"
+
+# Maximum number of images to download and cache from Unsplash APIs
+limit = 10
+
+# Seconds before refreshing the image cache and re-download from Unsplash
+refresh = 86400
