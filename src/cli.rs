@@ -1,18 +1,17 @@
 //! Module for command-line related things.
 
-extern crate toml;
-extern crate wallsplash;
-
 use std::env;
 use std::error::Error;
 use std::fs::File;
 use std::io::Read;
+use std::path::Path;
+use std::path::PathBuf;
 use std::time::Duration;
 
 use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
-use toml::Value;
+use toml;
 
 pub fn build_cli_app() -> App<'static, 'static> {
     App::new("wallsplash")
@@ -63,33 +62,93 @@ pub fn build_cli_app() -> App<'static, 'static> {
         )
 }
 
-pub fn parse_config_file(matches: &ArgMatches) -> Result<Value, Box<Error>> {
+#[derive(Debug, Deserialize)]
+pub struct ConfigTable {
+    timeout: Option<u32>,
+    local: Option<LocalTable>,
+    unsplash: Option<UnsplashTable>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalTable {
+    dir: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct UnsplashTable {
+    token: Option<String>,
+    limit: Option<u32>,
+    refresh: Option<u32>,
+}
+
+impl Default for ConfigTable {
+    fn default() -> ConfigTable {
+        ConfigTable {
+            timeout: Some(30 * 60),
+            local: Default::default(),
+            unsplash: Default::default(),
+        }
+    }
+}
+
+impl Default for LocalTable {
+    fn default() -> LocalTable {
+        LocalTable { dir: None }
+    }
+}
+
+impl Default for UnsplashTable {
+    fn default() -> UnsplashTable {
+        UnsplashTable {
+            token: None,
+            limit: Some(10),
+            refresh: Some(24 * 60 * 60),
+        }
+    }
+}
+
+fn default_config_path() -> PathBuf {
+    let mut p = env::home_dir().unwrap();
+    p.push(".config");
+    p.push("wallsplash");
+    p.push("config.toml");
+    p
+}
+
+pub fn parse_config_file(matches: &ArgMatches) -> Result<ConfigTable, Box<Error>> {
     let path = match matches.value_of("config") {
-        Some(p) => p.to_string(),
+        Some(p) => Path::new(p).to_path_buf(),
         None => {
-            let mut p = env::home_dir().unwrap();
-            p.push(".config");
-            p.push("wallsplash");
-            p.push("config.toml");
-            p.to_str().unwrap().to_string()
+            let p = default_config_path();
+            debug!(
+                "config file not specified, trying default config file at {}",
+                p.display()
+            );
+            p
         }
     };
+    if !path.is_file() {
+        return Ok(ConfigTable::default());
+    }
     let mut content = String::new();
     File::open(path)?.read_to_string(&mut content)?;
-    match content.parse::<Value>() {
-        Ok(v) => Ok(v),
+    match toml::from_str::<ConfigTable>(&content) {
+        Ok(t) => Ok(t),
         Err(e) => Err(Box::new(e)),
     }
 }
 
-pub fn parse_arg_timeout(matches: &ArgMatches, table: &Value) -> Result<Duration, Box<Error>> {
+pub fn parse_arg_timeout(
+    matches: &ArgMatches,
+    table: &ConfigTable,
+) -> Result<Duration, Box<Error>> {
     let secs = match matches.value_of("timeout") {
         Some(secs) => Some(secs.parse::<u64>()?),
         None => None,
     };
     let dur = match secs {
         Some(secs) => Some(Duration::from_secs(secs)),
-        None => match table["timeout"].as_integer() {
+        None => match table.timeout {
             Some(int) => Some(Duration::from_secs(int as u64)),
             None => None,
         },
@@ -100,43 +159,44 @@ pub fn parse_arg_timeout(matches: &ArgMatches, table: &Value) -> Result<Duration
     }
 }
 
-pub fn parse_arg_local_dir(matches: &ArgMatches, table: &Value) -> Result<String, Box<Error>> {
+pub fn parse_arg_local_dir(
+    matches: &ArgMatches,
+    table: &ConfigTable,
+) -> Result<String, Box<Error>> {
     let dir = match matches.value_of("dir") {
-        Some(path) => path,
-        None => {
-            let local = match table["local"].as_table() {
-                Some(t) => t,
-                None => panic!("need a local directory"),
-            };
-            match local["dir"].as_str() {
-                Some(s) => s,
-                None => panic!("need a local directory"),
-            }
-        }
+        Some(path) => path.to_string(),
+        None => table
+            .local
+            .as_ref()
+            .expect("need a local directory")
+            .dir
+            .as_ref()
+            .expect("need a local directory")
+            .to_string(),
     };
-    Ok(dir.to_string())
+    Ok(dir)
 }
 
-pub fn parse_arg_token(matches: &ArgMatches, table: &Value) -> Result<String, Box<Error>> {
+pub fn parse_arg_token(matches: &ArgMatches, table: &ConfigTable) -> Result<String, Box<Error>> {
     Ok(match matches.value_of("token") {
         Some(tok) => tok.to_string(),
-        None => table["unsplash"].as_table().expect("need unsplash token")["token"]
-            .as_str()
+        None => table
+            .unsplash
+            .as_ref()
+            .expect("need unsplash token")
+            .token
+            .as_ref()
             .expect("need unsplash token")
             .to_string(),
     })
 }
 
-pub fn parse_arg_limit(matches: &ArgMatches, table: &Value) -> Result<u32, Box<Error>> {
+pub fn parse_arg_limit(matches: &ArgMatches, table: &ConfigTable) -> Result<u32, Box<Error>> {
     Ok(match matches.value_of("limit") {
         Some(num) => num.parse::<u32>()?,
         None => {
-            let unsplash = match table["unsplash"].as_table() {
-                Some(t) => Some(t),
-                None => None,
-            };
-            let limit = match unsplash {
-                Some(t) => t["limit"].as_integer(),
+            let limit = match table.unsplash {
+                Some(ref t) => t.limit,
                 None => None,
             };
             match limit {
@@ -147,12 +207,15 @@ pub fn parse_arg_limit(matches: &ArgMatches, table: &Value) -> Result<u32, Box<E
     })
 }
 
-pub fn parse_arg_refresh(matches: &ArgMatches, table: &Value) -> Result<Duration, Box<Error>> {
+pub fn parse_arg_refresh(
+    matches: &ArgMatches,
+    table: &ConfigTable,
+) -> Result<Duration, Box<Error>> {
     Ok(match matches.value_of("refresh") {
         Some(secs) => Duration::from_secs(secs.parse::<u64>()?),
         None => {
-            let refresh = match table["unsplash"].as_table() {
-                Some(t) => t["refresh"].as_integer(),
+            let refresh = match table.unsplash {
+                Some(ref t) => t.refresh,
                 None => None,
             };
             match refresh {

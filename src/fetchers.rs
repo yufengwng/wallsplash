@@ -105,7 +105,7 @@ impl UnsplashFetcher {
         cache.push("wallsplash");
         cache.push("cache");
 
-        if !cache.exists() || !cache.is_dir() {
+        if !cache.is_dir() {
             debug!("creating cache directory {:?}", cache);
             fs::create_dir_all(&cache)?;
         }

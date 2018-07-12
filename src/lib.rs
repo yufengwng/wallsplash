@@ -1,11 +1,10 @@
-//! Library for rotating desktop wallpapers using local and/or Unsplash images.
+//! Library for rotating desktop wallpapers using local and Unsplash images.
 
 #[macro_use]
 extern crate log;
 #[macro_use]
 extern crate serde_derive;
 extern crate reqwest;
-extern crate serde;
 
 use std::error::Error;
 use std::process::Command;
