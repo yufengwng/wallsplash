@@ -9,23 +9,28 @@ extern crate wallsplash;
 
 use std::error::Error;
 use std::process;
+use std::time::Duration;
 
 type ResBoxErr<T> = Result<T, Box<Error>>;
 
 fn main() {
     env_logger::init().unwrap();
 
-    let app = cli::build_app();
-    let matches = app.get_matches();
-    let table = unwrap_log(args::parse_config_file(&matches));
+    let args = match args::Args::parse() {
+        Ok(a) => a,
+        Err(e) => {
+            error!("{}", e);
+            process::exit(1);
+        }
+    };
 
-    let timeout = unwrap_log(args::parse_arg_timeout(&matches, &table));
-    let dir = unwrap_log(args::parse_arg_local_dir(&matches, &table));
-    let token = unwrap_log(args::parse_arg_token(&matches, &table));
-    let limit = unwrap_log(args::parse_arg_limit(&matches, &table));
-    let refresh = unwrap_log(args::parse_arg_refresh(&matches, &table));
-
-    let config = wallsplash::Config::new(&dir, &token, limit, timeout, refresh);
+    let config = wallsplash::Config::new(
+        &args.local_dir,
+        &args.unsplash_token,
+        args.unsplash_limit,
+        Duration::from_secs(args.timeout as u64),
+        Duration::from_secs(args.unsplash_refresh as u64),
+    );
 
     process::exit(match wallsplash::run(&config) {
         Ok(_) => 0,
@@ -34,16 +39,6 @@ fn main() {
             2
         }
     });
-}
-
-fn unwrap_log<T>(res: ResBoxErr<T>) -> T {
-    match res {
-        Ok(t) => t,
-        Err(e) => {
-            error!("{}", e);
-            process::exit(1);
-        }
-    }
 }
 
 mod cli {
@@ -172,9 +167,9 @@ mod defaults {
     use std::env;
     use std::path::PathBuf;
 
-    const _TIMEOUT: u32 = 30 * 60;
-    const _UNSPLASH_LIMIT: u32 = 10;
-    const _UNSPLASH_REFRESH: u32 = 24 * 60 * 60;
+    pub const TIMEOUT: u32 = 30 * 60;
+    pub const UNSPLASH_LIMIT: u32 = 10;
+    pub const UNSPLASH_REFRESH: u32 = 24 * 60 * 60;
 
     pub fn config_path() -> PathBuf {
         let mut p = env::home_dir().unwrap();
@@ -187,16 +182,45 @@ mod defaults {
 
 mod args {
     use std::path::Path;
-    use std::time::Duration;
 
     use clap::ArgMatches;
 
+    use cli;
     use config::{self, ConfigTable};
     use defaults;
 
     use ResBoxErr;
 
-    pub fn parse_config_file(matches: &ArgMatches) -> ResBoxErr<ConfigTable> {
+    pub struct Args {
+        pub timeout: u32,
+        pub local_dir: String,
+        pub unsplash_token: String,
+        pub unsplash_limit: u32,
+        pub unsplash_refresh: u32,
+    }
+
+    impl Args {
+        pub fn parse() -> ResBoxErr<Args> {
+            let matches = cli::build_app().get_matches();
+            let table = parse_config_file(&matches)?;
+
+            let timeout = parse_arg_timeout(&matches, &table)?;
+            let dir = parse_arg_local_dir(&matches, &table)?;
+            let token = parse_arg_token(&matches, &table)?;
+            let limit = parse_arg_limit(&matches, &table)?;
+            let refresh = parse_arg_refresh(&matches, &table)?;
+
+            Ok(Args {
+                timeout: timeout,
+                local_dir: dir,
+                unsplash_token: token,
+                unsplash_limit: limit,
+                unsplash_refresh: refresh,
+            })
+        }
+    }
+
+    fn parse_config_file(matches: &ArgMatches) -> ResBoxErr<ConfigTable> {
         let path = matches
             .value_of("config")
             .map(|p| Path::new(p).to_path_buf())
@@ -208,82 +232,45 @@ mod args {
         config::parse_file(&path)
     }
 
-    pub fn parse_arg_timeout(matches: &ArgMatches, table: &ConfigTable) -> ResBoxErr<Duration> {
+    fn parse_arg_timeout(matches: &ArgMatches, table: &ConfigTable) -> ResBoxErr<u32> {
         let secs = match matches.value_of("timeout") {
-            Some(secs) => Some(secs.parse::<u64>()?),
+            Some(secs) => Some(secs.parse::<u32>()?),
             None => None,
         };
-        let dur = match secs {
-            Some(secs) => Some(Duration::from_secs(secs)),
-            None => match table.timeout {
-                Some(int) => Some(Duration::from_secs(int as u64)),
-                None => None,
-            },
+        Ok(secs.or(table.timeout).unwrap_or(defaults::TIMEOUT))
+    }
+
+    fn parse_arg_local_dir(matches: &ArgMatches, table: &ConfigTable) -> ResBoxErr<String> {
+        Ok(matches
+            .value_of("dir")
+            .map(|s| s.to_string())
+            .or(table.local.as_ref().and_then(|t| t.dir.to_owned()))
+            .expect("need a local directory"))
+    }
+
+    fn parse_arg_token(matches: &ArgMatches, table: &ConfigTable) -> ResBoxErr<String> {
+        Ok(matches
+            .value_of("token")
+            .map(|s| s.to_string())
+            .or(table.unsplash.as_ref().and_then(|t| t.token.to_owned()))
+            .expect("need unsplash token"))
+    }
+
+    fn parse_arg_limit(matches: &ArgMatches, table: &ConfigTable) -> ResBoxErr<u32> {
+        let num = match matches.value_of("limit") {
+            Some(n) => Some(n.parse::<u32>()?),
+            None => None,
         };
-        match dur {
-            Some(dur) => Ok(dur),
-            None => Ok(Duration::from_secs(30 * 60)),
-        }
+        Ok(num.or(table.unsplash.as_ref().and_then(|t| t.limit))
+            .unwrap_or(defaults::UNSPLASH_LIMIT))
     }
 
-    pub fn parse_arg_local_dir(matches: &ArgMatches, table: &ConfigTable) -> ResBoxErr<String> {
-        let dir = match matches.value_of("dir") {
-            Some(path) => path.to_string(),
-            None => table
-                .local
-                .as_ref()
-                .expect("need a local directory")
-                .dir
-                .as_ref()
-                .expect("need a local directory")
-                .to_string(),
+    fn parse_arg_refresh(matches: &ArgMatches, table: &ConfigTable) -> ResBoxErr<u32> {
+        let secs = match matches.value_of("refresh") {
+            Some(secs) => Some(secs.parse::<u32>()?),
+            None => None,
         };
-        Ok(dir)
-    }
-
-    pub fn parse_arg_token(matches: &ArgMatches, table: &ConfigTable) -> ResBoxErr<String> {
-        Ok(match matches.value_of("token") {
-            Some(tok) => tok.to_string(),
-            None => table
-                .unsplash
-                .as_ref()
-                .expect("need unsplash token")
-                .token
-                .as_ref()
-                .expect("need unsplash token")
-                .to_string(),
-        })
-    }
-
-    pub fn parse_arg_limit(matches: &ArgMatches, table: &ConfigTable) -> ResBoxErr<u32> {
-        Ok(match matches.value_of("limit") {
-            Some(num) => num.parse::<u32>()?,
-            None => {
-                let limit = match table.unsplash {
-                    Some(ref t) => t.limit,
-                    None => None,
-                };
-                match limit {
-                    Some(num) => num as u32,
-                    None => 10,
-                }
-            }
-        })
-    }
-
-    pub fn parse_arg_refresh(matches: &ArgMatches, table: &ConfigTable) -> ResBoxErr<Duration> {
-        Ok(match matches.value_of("refresh") {
-            Some(secs) => Duration::from_secs(secs.parse::<u64>()?),
-            None => {
-                let refresh = match table.unsplash {
-                    Some(ref t) => t.refresh,
-                    None => None,
-                };
-                match refresh {
-                    Some(r) => Duration::from_secs(r as u64),
-                    None => Duration::from_secs(24 * 60 * 60),
-                }
-            }
-        })
+        Ok(secs.or(table.unsplash.as_ref().and_then(|t| t.refresh))
+            .unwrap_or(defaults::UNSPLASH_REFRESH))
     }
 }
