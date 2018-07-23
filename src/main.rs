@@ -9,7 +9,6 @@ extern crate wallsplash;
 
 use std::error::Error;
 use std::process;
-use std::time::Duration;
 
 type ResBoxErr<T> = Result<T, Box<Error>>;
 
@@ -102,6 +101,14 @@ mod cli {
 }
 
 mod config {
+    use std::fs::File;
+    use std::io::Read;
+    use std::path::Path;
+
+    use toml;
+
+    use ResBoxErr;
+
     #[derive(Debug, Deserialize)]
     pub struct ConfigTable {
         pub timeout: Option<u32>,
@@ -124,7 +131,7 @@ mod config {
     impl Default for ConfigTable {
         fn default() -> ConfigTable {
             ConfigTable {
-                timeout: Some(30 * 60),
+                timeout: None,
                 local: Default::default(),
                 unsplash: Default::default(),
             }
@@ -141,9 +148,22 @@ mod config {
         fn default() -> UnsplashTable {
             UnsplashTable {
                 token: None,
-                limit: Some(10),
-                refresh: Some(24 * 60 * 60),
+                limit: None,
+                refresh: None,
             }
+        }
+    }
+
+    pub fn parse_file(path: &Path) -> ResBoxErr<ConfigTable> {
+        if !path.is_file() {
+            debug!("config file {} does not exist", path.display());
+            return Ok(ConfigTable::default());
+        }
+        let mut content = String::new();
+        File::open(path)?.read_to_string(&mut content)?;
+        match toml::from_str::<ConfigTable>(&content) {
+            Ok(t) => Ok(t),
+            Err(e) => Err(Box::new(e)),
         }
     }
 }
@@ -151,6 +171,10 @@ mod config {
 mod defaults {
     use std::env;
     use std::path::PathBuf;
+
+    const _TIMEOUT: u32 = 30 * 60;
+    const _UNSPLASH_LIMIT: u32 = 10;
+    const _UNSPLASH_REFRESH: u32 = 24 * 60 * 60;
 
     pub fn config_path() -> PathBuf {
         let mut p = env::home_dir().unwrap();
@@ -162,35 +186,26 @@ mod defaults {
 }
 
 mod args {
-    use super::config::*;
-    use super::*;
-    use clap::ArgMatches;
-    use std::fs::File;
-    use std::io::Read;
     use std::path::Path;
-    use toml;
+    use std::time::Duration;
+
+    use clap::ArgMatches;
+
+    use config::{self, ConfigTable};
+    use defaults;
+
+    use ResBoxErr;
 
     pub fn parse_config_file(matches: &ArgMatches) -> ResBoxErr<ConfigTable> {
-        let path = match matches.value_of("config") {
-            Some(p) => Path::new(p).to_path_buf(),
-            None => {
+        let path = matches
+            .value_of("config")
+            .map(|p| Path::new(p).to_path_buf())
+            .unwrap_or_else(|| {
                 let p = defaults::config_path();
-                debug!(
-                    "config file not specified, trying default config file at {}",
-                    p.display()
-                );
+                debug!("falling back to default config path {}", p.display());
                 p
-            }
-        };
-        if !path.is_file() {
-            return Ok(ConfigTable::default());
-        }
-        let mut content = String::new();
-        File::open(path)?.read_to_string(&mut content)?;
-        match toml::from_str::<ConfigTable>(&content) {
-            Ok(t) => Ok(t),
-            Err(e) => Err(Box::new(e)),
-        }
+            });
+        config::parse_file(&path)
     }
 
     pub fn parse_arg_timeout(matches: &ArgMatches, table: &ConfigTable) -> ResBoxErr<Duration> {
