@@ -24,7 +24,7 @@ fn main() {
         }
     };
 
-    let config = wallsplash::Config::new(
+    let ctx = wallsplash::Context::new(
         &args.local_dir,
         &args.unsplash_token,
         args.unsplash_limit,
@@ -32,7 +32,7 @@ fn main() {
         Duration::from_secs(args.unsplash_refresh as u64),
     );
 
-    process::exit(match wallsplash::run(&config) {
+    process::exit(match wallsplash::run(&ctx) {
         Ok(_) => 0,
         Err(err) => {
             error!("{}", err);

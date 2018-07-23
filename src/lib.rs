@@ -17,7 +17,7 @@ mod fetchers;
 use fetchers::{Fetch, LocalFetcher, UnsplashFetcher};
 
 #[derive(Debug)]
-pub struct Config {
+pub struct Context {
     /// Local directory path to find user wallpapers.
     dir: String,
     /// Unsplash API Client token.
@@ -30,9 +30,9 @@ pub struct Config {
     refresh: Duration,
 }
 
-impl Config {
+impl Context {
     pub fn new(dir: &str, token: &str, limit: u32, timeout: Duration, refresh: Duration) -> Self {
-        Config {
+        Context {
             dir: dir.to_owned(),
             token: token.to_owned(),
             limit: limit,
@@ -42,11 +42,11 @@ impl Config {
     }
 }
 
-pub fn run(config: &Config) -> Result<(), Box<Error>> {
-    debug!("{:?}\n", config);
+pub fn run(ctx: &Context) -> Result<(), Box<Error>> {
+    debug!("{:?}\n", ctx);
 
-    let mut unsplash = UnsplashFetcher::new(config.token.as_str(), config.limit, config.refresh)?;
-    let mut local = LocalFetcher::new(config.dir.as_str());
+    let mut unsplash = UnsplashFetcher::new(ctx.token.as_str(), ctx.limit, ctx.refresh)?;
+    let mut local = LocalFetcher::new(ctx.dir.as_str());
 
     let mut do_local = true;
 
@@ -67,6 +67,6 @@ pub fn run(config: &Config) -> Result<(), Box<Error>> {
         }
 
         do_local = !do_local;
-        thread::sleep(config.timeout);
+        thread::sleep(ctx.timeout);
     }
 }
