@@ -1,12 +1,11 @@
 [package]
 name = "wallsplash"
-version = "0.0.3"
+version = "0.1.0"
 authors = ["Yufeng Wang <yufengwang05@gmail.com>"]
 
 [[bin]]
 name = "wallsplash"
 path = "src/main.rs"
-doc = false
 
 [lib]
 name = "wallsplash"

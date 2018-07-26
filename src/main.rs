@@ -43,7 +43,7 @@ mod cli {
 
     pub fn build_app() -> App<'static, 'static> {
         App::new("wallsplash")
-            .version("0.0.3")
+            .version("0.1.0")
             .author("Yufeng Wang <yufengwang05@gmail.com>")
             .about("Display wallpapers from local image directory and Unsplash.")
             .arg(
