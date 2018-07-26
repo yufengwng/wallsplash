@@ -16,6 +16,7 @@ mod fetchers;
 
 use fetchers::{Fetch, LocalFetcher, UnsplashFetcher};
 
+/// Information needed by the engine to know what and how to run.
 #[derive(Debug)]
 pub struct Context {
     /// Local directory path to find user wallpapers.
@@ -31,7 +32,7 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn new(dir: &str, token: &str, limit: u32, timeout: Duration, refresh: Duration) -> Self {
+    pub fn new(dir: &str, token: &str, limit: u32, timeout: Duration, refresh: Duration) -> Context {
         Context {
             dir: dir.to_owned(),
             token: token.to_owned(),
@@ -42,6 +43,7 @@ impl Context {
     }
 }
 
+/// Execute the never-ending engine!
 pub fn run(ctx: &Context) -> Result<(), Box<Error>> {
     debug!("{:?}\n", ctx);
 

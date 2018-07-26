@@ -9,7 +9,6 @@ extern crate wallsplash;
 
 use std::error::Error;
 use std::process;
-use std::time::Duration;
 
 type ResBoxErr<T> = Result<T, Box<Error>>;
 
@@ -24,24 +23,21 @@ fn main() {
         }
     };
 
-    let ctx = wallsplash::Context::new(
-        &args.local_dir,
-        &args.unsplash_token,
-        args.unsplash_limit,
-        Duration::from_secs(args.timeout as u64),
-        Duration::from_secs(args.unsplash_refresh as u64),
-    );
-
-    process::exit(match wallsplash::run(&ctx) {
+    let ctx = args.into_context();
+    let status = match wallsplash::run(&ctx) {
         Ok(_) => 0,
         Err(err) => {
             error!("{}", err);
             2
         }
-    });
+    };
+
+    process::exit(status);
 }
 
 mod cli {
+    //! Module for defining the application command-line interface.
+
     use clap::App;
     use clap::Arg;
 
@@ -95,7 +91,10 @@ mod cli {
     }
 }
 
-mod config {
+mod cfg {
+    //! Module for application-specific configuration file. Defines the structure of the
+    //! configuration file format and how to read it into the application.
+
     use std::fs::File;
     use std::io::Read;
     use std::path::Path;
@@ -149,6 +148,13 @@ mod config {
         }
     }
 
+    /// Read the configuration file into a structure. Will default to an empty structure when the
+    /// file does not exist, which may happen if user did not specific the file on the command-line
+    /// or has a configuration file in the default path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when problem reading the file or converting to structure.
     pub fn parse_file(path: &Path) -> ResBoxErr<ConfigTable> {
         if !path.is_file() {
             debug!("config file {} does not exist", path.display());
@@ -163,14 +169,24 @@ mod config {
     }
 }
 
-mod defaults {
+mod def {
+    //! Module for application-specific default values. Fallback to these when user does not
+    //! provide or set these using other means.
+
     use std::env;
     use std::path::PathBuf;
 
+    /// 30 minutes in seconds.
     pub const TIMEOUT: u32 = 30 * 60;
+
+    /// 10 images from Unsplash.
     pub const UNSPLASH_LIMIT: u32 = 10;
+
+    /// 24 hours in seconds.
     pub const UNSPLASH_REFRESH: u32 = 24 * 60 * 60;
 
+    /// Get the default configuration file path expected by the application. This assumes that the
+    /// user has a valid home directory.
     pub fn config_path() -> PathBuf {
         let mut p = env::home_dir().unwrap();
         p.push(".config");
@@ -181,16 +197,21 @@ mod defaults {
 }
 
 mod args {
+    //! Module for parsing and massaging application-specific arguments.
+
     use std::path::Path;
+    use std::time::Duration;
 
     use clap::ArgMatches;
+    use wallsplash;
 
+    use cfg;
     use cli;
-    use config::{self, ConfigTable};
-    use defaults;
+    use def;
 
     use ResBoxErr;
 
+    /// Arguments that are merged, normalized, and flattened.
     pub struct Args {
         pub timeout: u32,
         pub local_dir: String,
@@ -200,77 +221,118 @@ mod args {
     }
 
     impl Args {
+        /// Arguments to the application comes from 3 different sources:
+        ///
+        /// 1. command-line arguments
+        /// 2. configuration file
+        /// 3. default settings
+        ///
+        /// All these sources are merged into a normalized argument structure. Preference is given
+        /// in the listed order, from high to low.
+        ///
+        /// # Errors
+        ///
+        /// Possible errors including file I/O issues, configuration file convertion issues,
+        /// missing required arguments, or invalid argument formats.
         pub fn parse() -> ResBoxErr<Args> {
             let matches = cli::build_app().get_matches();
-            let table = parse_config_file(&matches)?;
+            let table = ArgsParser::parse_config_file(&matches)?;
+            let parser = ArgsParser::new(matches, table);
+            parser.to_args()
+        }
 
-            let timeout = parse_arg_timeout(&matches, &table)?;
-            let dir = parse_arg_local_dir(&matches, &table)?;
-            let token = parse_arg_token(&matches, &table)?;
-            let limit = parse_arg_limit(&matches, &table)?;
-            let refresh = parse_arg_refresh(&matches, &table)?;
-
-            Ok(Args {
-                timeout: timeout,
-                local_dir: dir,
-                unsplash_token: token,
-                unsplash_limit: limit,
-                unsplash_refresh: refresh,
-            })
+        /// Consume and convert arguments to a context object understood by the application engine.
+        pub fn into_context(self) -> wallsplash::Context {
+            wallsplash::Context::new(
+                &self.local_dir,
+                &self.unsplash_token,
+                self.unsplash_limit,
+                Duration::from_secs(self.timeout as u64),
+                Duration::from_secs(self.unsplash_refresh as u64),
+            )
         }
     }
 
-    fn parse_config_file(matches: &ArgMatches) -> ResBoxErr<ConfigTable> {
-        let path = matches
-            .value_of("config")
-            .map(|p| Path::new(p).to_path_buf())
-            .unwrap_or_else(|| {
-                let p = defaults::config_path();
-                debug!("falling back to default config path {}", p.display());
-                p
-            });
-        config::parse_file(&path)
+    struct ArgsParser<'a> {
+        matches: ArgMatches<'a>,
+        table: cfg::ConfigTable,
     }
 
-    fn parse_arg_timeout(matches: &ArgMatches, table: &ConfigTable) -> ResBoxErr<u32> {
-        let secs = match matches.value_of("timeout") {
-            Some(secs) => Some(secs.parse::<u32>()?),
-            None => None,
-        };
-        Ok(secs.or(table.timeout).unwrap_or(defaults::TIMEOUT))
-    }
+    impl<'a> ArgsParser<'a> {
+        fn parse_config_file(matches: &ArgMatches) -> ResBoxErr<cfg::ConfigTable> {
+            let path = matches
+                .value_of("config")
+                .map(|p| Path::new(p).to_path_buf())
+                .unwrap_or_else(|| {
+                    let p = def::config_path();
+                    debug!("falling back to default config path {}", p.display());
+                    p
+                });
+            cfg::parse_file(&path)
+        }
 
-    fn parse_arg_local_dir(matches: &ArgMatches, table: &ConfigTable) -> ResBoxErr<String> {
-        Ok(matches
-            .value_of("dir")
-            .map(|s| s.to_string())
-            .or(table.local.as_ref().and_then(|t| t.dir.to_owned()))
-            .expect("need a local directory"))
-    }
+        fn new(m: ArgMatches<'a>, t: cfg::ConfigTable) -> ArgsParser<'a> {
+            ArgsParser {
+                matches: m,
+                table: t,
+            }
+        }
 
-    fn parse_arg_token(matches: &ArgMatches, table: &ConfigTable) -> ResBoxErr<String> {
-        Ok(matches
-            .value_of("token")
-            .map(|s| s.to_string())
-            .or(table.unsplash.as_ref().and_then(|t| t.token.to_owned()))
-            .expect("need unsplash token"))
-    }
+        fn to_args(&self) -> ResBoxErr<Args> {
+            Ok(Args {
+                timeout: self.parse_timeout()?,
+                local_dir: self.parse_local_dir()?,
+                unsplash_token: self.parse_token()?,
+                unsplash_limit: self.parse_limit()?,
+                unsplash_refresh: self.parse_refresh()?,
+            })
+        }
 
-    fn parse_arg_limit(matches: &ArgMatches, table: &ConfigTable) -> ResBoxErr<u32> {
-        let num = match matches.value_of("limit") {
-            Some(n) => Some(n.parse::<u32>()?),
-            None => None,
-        };
-        Ok(num.or(table.unsplash.as_ref().and_then(|t| t.limit))
-            .unwrap_or(defaults::UNSPLASH_LIMIT))
-    }
+        fn parse_timeout(&self) -> ResBoxErr<u32> {
+            let secs = match self.matches.value_of("timeout") {
+                Some(secs) => Some(secs.parse::<u32>()?),
+                None => None,
+            };
+            Ok(secs.or(self.table.timeout).unwrap_or(def::TIMEOUT))
+        }
 
-    fn parse_arg_refresh(matches: &ArgMatches, table: &ConfigTable) -> ResBoxErr<u32> {
-        let secs = match matches.value_of("refresh") {
-            Some(secs) => Some(secs.parse::<u32>()?),
-            None => None,
-        };
-        Ok(secs.or(table.unsplash.as_ref().and_then(|t| t.refresh))
-            .unwrap_or(defaults::UNSPLASH_REFRESH))
+        fn parse_local_dir(&self) -> ResBoxErr<String> {
+            Ok(self.matches
+                .value_of("dir")
+                .map(|s| s.to_string())
+                .or(self.table.local.as_ref().and_then(|t| t.dir.to_owned()))
+                .expect("need a local directory"))
+        }
+
+        fn parse_token(&self) -> ResBoxErr<String> {
+            Ok(self.matches
+                .value_of("token")
+                .map(|s| s.to_string())
+                .or(self.table
+                    .unsplash
+                    .as_ref()
+                    .and_then(|t| t.token.to_owned()))
+                .expect("need unsplash token"))
+        }
+
+        fn parse_limit(&self) -> ResBoxErr<u32> {
+            let num = match self.matches.value_of("limit") {
+                Some(n) => Some(n.parse::<u32>()?),
+                None => None,
+            };
+            Ok(num.or(self.table.unsplash.as_ref().and_then(|t| t.limit))
+                .unwrap_or(def::UNSPLASH_LIMIT))
+        }
+
+        fn parse_refresh(&self) -> ResBoxErr<u32> {
+            let secs = match self.matches.value_of("refresh") {
+                Some(secs) => Some(secs.parse::<u32>()?),
+                None => None,
+            };
+            Ok(
+                secs.or(self.table.unsplash.as_ref().and_then(|t| t.refresh))
+                    .unwrap_or(def::UNSPLASH_REFRESH),
+            )
+        }
     }
 }
