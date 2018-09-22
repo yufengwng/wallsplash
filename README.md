@@ -1,6 +1,11 @@
 ### wallsplash
 
-a rust app for spicing up your desktop by rotating the wallpaper using images in a local directory and images downloaded from unsplash
+a rust app for spicing up your desktop by rotating the wallpaper using images
+in a local directory and images downloaded from unsplash
+
+[![Build Status](
+https://travis-ci.org/yufengwng/wallsplash.svg?branch=master)](
+https://travis-ci.org/yufengwng/wallsplash)
 
 \# setup
 
@@ -20,5 +25,5 @@ a rust app for spicing up your desktop by rotating the wallpaper using images in
 
 1. grab the config file: `cp ./conf/example.toml ~/.config/wallsplash/config.toml`
 2. edit config file, paste in unsplash access key
-3. run it in the background: `/path/to/wallsplash 2>&1 > /dev/null &!`
+3. run it in the background: `/path/to/wallsplash >/dev/null 2>&1 &!`
 
